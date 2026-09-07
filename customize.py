@@ -42,9 +42,6 @@ def fetch_preview_outputs(blocks: list[dict]) -> dict[int, str]:
     """블록별로 실제 커맨드를 한 번 실행해서 미리보기용 출력을 얻는다."""
     outputs: dict[int, str] = {}
     for i, block in enumerate(blocks):
-        if block["id"] == "custom":
-            outputs[i] = ""
-            continue
         cmd = L.block_command(block)
         try:
             proc = subprocess.run(["/bin/sh", "-c", cmd], capture_output=True, text=True, timeout=PREVIEW_TIMEOUT)
@@ -60,11 +57,9 @@ def render_preview_line(blocks: list[dict], outputs: dict[int, str]) -> str:
         if not block.get("enabled", True):
             continue
         text = outputs.get(i, "")
-        if not text and block["id"] == "custom":
-            text = f"[{L.block_label(block)}]"
         if text:
             parts.append(text)
-    return SEPARATOR.join(parts) if parts else "(tab bar is empty)"
+    return SEPARATOR.join(parts) if parts else "(no plugin widgets enabled)"
 
 
 def run(stdscr, blocks: list[dict]) -> list[dict] | None:

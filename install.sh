@@ -28,10 +28,11 @@ chmod +x "$DEST_DIR/agent_usage.py" "$DEST_DIR/tab_id.py"
 note "installed: $DEST_DIR/agent_usage.py"
 note "installed: $DEST_DIR/tab_id.py"
 
-# --- layout.toml을 만들거나 불러오고, config.toml의 tab_bar_right 전체를 그로부터 다시 쓴다 ---
-# layout.toml이 없으면(첫 설치) 기존 tab_bar_right 항목을 블록으로 승격 시도한다 — 정확히
-# 일치하는 것만 카탈로그 블록으로, 나머지는 원문을 보존하는 custom 블록으로. 이후로는 이
-# layout.toml이 진실의 원천이라 tab_bar_right는 항상 여기서 통째로 재생성된다.
+# --- layout.toml을 만들거나 불러오고, config.toml의 tab_bar_right를 그로부터 다시 쓴다 ---
+# 이 플러그인이 관리하는 위젯은 카탈로그 3개(agent-status/weather/herdr-tab-id)뿐이다.
+# layout.toml이 없으면(첫 설치) config에 이미 있는 위젯을 감지해 해당 블록을 켜고
+# (agent-status는 기본 켬), 나머지는 팝업에서 켤 수 있게 꺼진 상태로 둔다. 카탈로그에 없는
+# 기존 항목(zoom, 사용자 스크립트 등)은 render_config가 원문 그대로 보존한다.
 CONFIG_TOML="$CONFIG_DIR/config.toml" SRC_DIR="$SRC_DIR" DEST_DIR="$DEST_DIR" python3 - <<'PY'
 import os, sys
 from pathlib import Path
@@ -45,17 +46,14 @@ layout_path = Path(os.environ["DEST_DIR"]) / "layout.toml"
 text = config_path.read_text() if config_path.exists() else ""
 
 if layout_path.exists():
-    blocks = L.load(layout_path)
-    if not any(b["id"] == "agent-status" for b in blocks):
-        blocks.append({"id": "agent-status", "enabled": True})
-        print("layout: added agent-status widget")
+    blocks = L.load(layout_path)  # 이미 있는 사용자 선택을 존중
 else:
     span = R.find_array_span(text)
     raw_entries = L.split_array_entries(text[span[1]:span[2]]) if span else []
-    parsed_entries = [(raw, L.parse_inline_table(raw)) for raw in raw_entries]
-    blocks, notes = L.build_initial_layout(parsed_entries)
-    for note_text in notes:
-        print(f"layout: {note_text}")
+    parsed_entries = [L.parse_inline_table(raw) for raw in raw_entries]
+    blocks = L.build_initial_layout(parsed_entries)
+    enabled = [b["id"] for b in blocks if b.get("enabled")]
+    print(f"layout: enabled widgets: {', '.join(enabled) if enabled else '(none)'}")
 
 # config.toml에 먼저 반영해보고, 성공했을 때만 layout.toml을 남긴다 — 실패 시 아무 흔적도
 # 남기지 않는다(기존 install.sh의 all-or-nothing 보장을 그대로 유지).

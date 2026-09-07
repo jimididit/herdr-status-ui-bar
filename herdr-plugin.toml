@@ -1,6 +1,6 @@
 id = "speardragon.herdr-status-ui-bar"
 name = "Agent Usage Bar"
-version = "0.3.0"
+version = "0.4.0"
 min_herdr_version = "0.8.0"
 description = "AI agent plan-usage gauges (Claude Code / Codex / Grok) in the herdr tab bar"
 platforms = ["macos", "linux"]
@@ -31,6 +31,6 @@ command = ["herdr", "plugin", "pane", "open", "--plugin", "speardragon.herdr-sta
 
 [[actions]]
 id = "reset"
-title = "Agent Usage Bar: Clear all tab-bar widgets"
+title = "Agent Usage Bar: Turn off all plugin widgets"
 contexts = ["global", "workspace"]
 command = ["python3", "reset.py"]

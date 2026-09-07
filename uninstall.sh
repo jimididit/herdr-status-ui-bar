@@ -13,6 +13,7 @@ note() { printf '%s\n' "$1"; }
 
 # --- layout.toml에서 agent-status 블록 제거, config.toml의 tab_bar_right 재생성 ---
 KEEP_TAB_ID=0
+KEEP_DIR=0
 if [ -f "$DEST_DIR/layout.toml" ]; then
     CONFIG_TOML="$CONFIG_DIR/config.toml" SRC_DIR="$SRC_DIR" DEST_DIR="$DEST_DIR" python3 - <<'PY'
 import os, sys
@@ -26,14 +27,17 @@ dest = Path(os.environ["DEST_DIR"])
 config_path = Path(os.environ["CONFIG_TOML"])
 layout_path = dest / "layout.toml"
 
+# agent-status만 끈다 — 사용자가 팝업으로 켜 둔 weather/herdr-tab-id와 비관리 항목은 유지.
 blocks = L.load(layout_path)
-remaining = [b for b in blocks if b["id"] != "agent-status"]
-if len(remaining) != len(blocks):
-    print("layout: agent-status widget removed")
+remaining = [{**b, "enabled": False} if b["id"] == "agent-status" else b for b in blocks]
+if any(b["id"] == "agent-status" and b.get("enabled") for b in blocks):
+    print("layout: agent-status widget disabled")
 L.save(layout_path, remaining)
 
 tab_id_active = any(b["id"] == "herdr-tab-id" and b.get("enabled", True) for b in remaining)
+weather_active = any(b["id"] == "weather" and b.get("enabled", True) for b in remaining)
 (dest / ".keep-tab-id").write_text("1" if tab_id_active else "0")
+(dest / ".keep-dir").write_text("1" if (tab_id_active or weather_active) else "0")
 if tab_id_active:
     print("note: herdr-tab-id widget is still enabled — keeping tab_id.py")
 
@@ -45,6 +49,10 @@ PY
     if [ -f "$DEST_DIR/.keep-tab-id" ]; then
         [ "$(cat "$DEST_DIR/.keep-tab-id")" = "1" ] && KEEP_TAB_ID=1
         rm -f "$DEST_DIR/.keep-tab-id"
+    fi
+    if [ -f "$DEST_DIR/.keep-dir" ]; then
+        [ "$(cat "$DEST_DIR/.keep-dir")" = "1" ] && KEEP_DIR=1
+        rm -f "$DEST_DIR/.keep-dir"
     fi
 else
     note "layout.toml not present — skipping tab_bar_right cleanup"
@@ -79,14 +87,17 @@ else:
 PY
 fi
 
-# --- 에셋 정리: agent-status 전용 파일만 지운다. herdr-tab-id가 아직 켜져 있으면 tab_id.py와
-#     layout.toml은 남긴다 (다른 블록이 계속 동작해야 하므로) ---
+# --- 에셋 정리: agent-status 전용 파일만 지운다. weather나 herdr-tab-id가 아직 켜져 있으면
+#     layout.toml을 남기고(재설치/재편집 시 선택 기억), herdr-tab-id면 tab_id.py도 남긴다 ---
 rm -f "$DEST_DIR/agent_usage.py" "$DEST_DIR/statusline-wrapper.sh" \
       "$DEST_DIR/statusline-original.sh" "$DEST_DIR/statusline-original.json"
 rm -f "$CONFIG_DIR/grok_usage_cache.json"   # agent-status가 만든 캐시 (생성 데이터라 안전)
 
-if [ "$KEEP_TAB_ID" = "1" ]; then
-    note "kept: $DEST_DIR/tab_id.py, $DEST_DIR/layout.toml (herdr-tab-id widget still enabled)"
+[ "$KEEP_TAB_ID" = "1" ] || rm -f "$DEST_DIR/tab_id.py"
+if [ "$KEEP_DIR" = "1" ]; then
+    kept="$DEST_DIR/layout.toml"
+    [ "$KEEP_TAB_ID" = "1" ] && kept="$DEST_DIR/tab_id.py, $kept"
+    note "kept: $kept (weather/herdr-tab-id widget still enabled)"
 else
     rm -f "$DEST_DIR/tab_id.py" "$DEST_DIR/layout.toml"
     rmdir "$DEST_DIR" 2>/dev/null || true

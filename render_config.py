@@ -42,9 +42,37 @@ def find_array_span(text: str, key: str = "tab_bar_right") -> tuple[int, int, in
     return (match.start(), match.end(), pos - 1)
 
 
-def build_array_body(blocks: list[dict]) -> str:
+def preserved_entries(text: str, weather_enabled: bool) -> list[str]:
+    """기존 tab_bar_right에서 이 플러그인이 관리하지 않는 항목의 원문을 순서대로 반환한다.
+
+    - 이 플러그인이 만든(또는 예전 형식) 항목은 항상 제거 대상(우리가 다시 쓴다).
+    - wttr.in을 쓰는 사용자 변형 weather 커맨드는 weather 블록이 켜질 때만 제거 대상
+      (그때 정규 weather로 대체) — 꺼져 있으면 사용자 것이므로 그대로 보존한다.
+    """
+    span = find_array_span(text)
+    if span is None:
+        return []
+    _, content_start, content_end = span
+    kept: list[str] = []
+    for raw in L.split_array_entries(text[content_start:content_end]):
+        parsed = L.parse_inline_table(raw)
+        cmd = parsed.get("command", "") if isinstance(parsed, dict) and parsed.get("type") == "command" else None
+        if cmd is not None:
+            if L.is_managed_strict(cmd):
+                continue
+            if weather_enabled and L.is_weather_broad(cmd):
+                continue
+        kept.append(raw)
+    return kept
+
+
+def build_array_body(blocks: list[dict], preserved: list[str] | None = None) -> str:
+    """비관리 항목(원문 보존)들을 먼저 두고, 켜진 카탈로그 블록을 그 뒤에 이어 붙인다."""
+    preserved = preserved or []
     enabled = [b for b in blocks if b.get("enabled", True)]
-    return "".join(f"  {L.widget_toml(b)},\n" for b in enabled)
+    lines = [f"  {raw.rstrip(',').strip()},\n" for raw in preserved]
+    lines += [f"  {L.widget_toml(b)},\n" for b in enabled]
+    return "".join(lines)
 
 
 def _validate(new_text: str, body: str) -> None:
@@ -63,9 +91,16 @@ def _validate(new_text: str, body: str) -> None:
 
 
 def regenerate(config_path: Path, blocks: list[dict]) -> str:
-    """config_path의 [ui].tab_bar_right를 blocks에서 다시 만들어 쓴다."""
+    """config_path의 [ui].tab_bar_right를 blocks에서 다시 만들어 쓴다.
+
+    관리하지 않는 기존 항목(zoom, 사용자 스크립트 등)은 원문 그대로 앞쪽에 보존하고,
+    켜진 카탈로그 블록만 그 뒤에 이어 붙인다.
+    """
+    blocks = L.canonical_layout(blocks)
     text = config_path.read_text() if config_path.exists() else ""
-    body = build_array_body(blocks)
+    weather_enabled = any(b["id"] == "weather" and b.get("enabled", True) for b in blocks)
+    preserved = preserved_entries(text, weather_enabled)
+    body = build_array_body(blocks, preserved)
 
     span = find_array_span(text)
     if span is not None:

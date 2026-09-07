@@ -34,8 +34,8 @@ cat > "$CLAUDE_SETTINGS" <<'EOF'
 }
 EOF
 
-# 1) 설치 — 위젯 라인·에셋·래퍼 생성. 인식 안 되는 기존 항목(zoom, 변형 wttr.in 커맨드)은
-#    custom 블록으로 보존되고, agent-status가 새로 추가된다.
+# 1) 설치 — layout.toml엔 항상 카탈로그 3개가 모두 들어가고, 인식 안 되는 기존 항목
+#    (zoom, 변형 wttr.in 커맨드)은 관리 대상이 아니므로 config에 원문 그대로 보존된다.
 "$REPO/install.sh" > /dev/null
 grep -c "agent-usage/agent_usage.py" "$HERDR_CONFIG_DIR/config.toml" | grep -qx 1 || fail "위젯 라인 1개가 아님"
 grep -q 'tab_bar_right = \[' "$HERDR_CONFIG_DIR/config.toml" || fail "tab_bar_right 배열 훼손"
@@ -44,11 +44,14 @@ grep -q '{ type = "zoom" }' "$HERDR_CONFIG_DIR/config.toml" || fail "무관 위�
 [ -x "$HERDR_CONFIG_DIR/agent-usage/tab_id.py" ] || fail "tab_id.py 미설치"
 [ -x "$HERDR_CONFIG_DIR/agent-usage/statusline-wrapper.sh" ] || fail "래퍼 미생성"
 [ -f "$HERDR_CONFIG_DIR/agent-usage/layout.toml" ] || fail "layout.toml 미생성"
-grep -q 'id = "agent-status"' "$HERDR_CONFIG_DIR/agent-usage/layout.toml" || fail "layout.toml에 agent-status 블록 없음"
-# 변형된(다른 도시가 아닌, 형식이 다른) wttr.in 커맨드는 정확 일치가 아니므로 weather로
-# 승격되지 않고 custom으로 남아야 한다 (원문 유실 방지가 승격 이득보다 우선).
+# layout.toml엔 세 블록이 모두 존재해야 한다 (설정 안 했어도 팝업에서 고를 수 있게).
+for bid in agent-status weather herdr-tab-id; do
+  grep -q "id = \"$bid\"" "$HERDR_CONFIG_DIR/agent-usage/layout.toml" || fail "layout.toml에 $bid 블록 없음"
+done
+grep -qx 'id = "custom"' "$HERDR_CONFIG_DIR/agent-usage/layout.toml" && fail "custom 블록이 남아있음 (3개만 있어야 함)" || true
+# 변형 wttr.in 커맨드는 정확 일치가 아니므로 weather로 인식되지 않는다 → weather 블록은
+# 꺼진 채로 있고, 변형 커맨드는 config에 그대로 보존된다 (원문 유실 방지).
 grep -q "wttr.in?format=%c" "$HERDR_CONFIG_DIR/config.toml" || fail "변형 weather 커맨드 유실"
-grep -q 'id = "weather"' "$HERDR_CONFIG_DIR/agent-usage/layout.toml" && fail "변형 커맨드가 잘못 승격됨" || true
 python3 -c "
 import json,os,sys
 s=json.load(open(os.environ['CLAUDE_SETTINGS']))
@@ -105,6 +108,18 @@ EOF
 "$REPO/install.sh" > /dev/null
 grep -q 'tab_bar_right = \[' "$HERDR_CONFIG_DIR/config.toml" || fail "tab_bar_right 신설 실패"
 grep -c "agent-usage/agent_usage.py" "$HERDR_CONFIG_DIR/config.toml" | grep -qx 1 || fail "신설 케이스 위젯 라인 이상"
+# 아무 위젯도 없던 config: 세 블록 모두 layout.toml에 있되 agent-status만 켜져 있어야 한다.
+python3 - "$HERDR_CONFIG_DIR/agent-usage/layout.toml" "$REPO" <<'PY' || fail "신설 케이스 기본 enabled 상태 이상"
+import sys
+sys.path.insert(0, sys.argv[2])
+import layout as L
+from pathlib import Path
+blocks = {b["id"]: b.get("enabled") for b in L.load(Path(sys.argv[1]))}
+assert set(blocks) == set(L.CATALOG_ORDER), blocks
+assert blocks["agent-status"] is True, blocks
+assert blocks["weather"] is False, blocks
+assert blocks["herdr-tab-id"] is False, blocks
+PY
 python3 -c "
 import tomllib,os
 tomllib.load(open(os.environ['HERDR_CONFIG_DIR']+'/config.toml','rb'))

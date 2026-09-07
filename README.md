@@ -60,14 +60,21 @@ What `install.sh` does (idempotent; anything it touches is backed up as `*.bak-a
 
 ## Customize the tab bar
 
-This plugin owns `[ui].tab_bar_right` entirely — it's always regenerated from
-`~/.config/herdr/agent-usage/layout.toml`, in order. Three blocks come built in:
+The plugin ships exactly three widgets, and the popup always lists all three —
+even if your config never had them — so you just pick which to show and in what
+order:
 
-| Block | Shows | Options |
+| Widget | Shows | Options |
 |---|---|---|
 | `agent-status` | the gauges described above | — |
 | `weather` | `curl`'d from [wttr.in](https://wttr.in) | `city` (default `Seoul`) |
 | `herdr-tab-id` | the focused pane id (`herdr api snapshot`, parsed in Python — no `jq`) | — |
+
+Their on/off state and order live in `~/.config/herdr/agent-usage/layout.toml`,
+and `[ui].tab_bar_right` is regenerated from it. Any other entries you have in
+`tab_bar_right` (`zoom`, a music-status script, a hand-written command) are **not**
+touched — they're preserved verbatim, kept ahead of the plugin's widgets, and
+never appear in the popup.
 
 Open the popup editor:
 
@@ -75,28 +82,28 @@ Open the popup editor:
 herdr plugin action invoke speardragon.herdr-status-ui-bar.customize
 ```
 
-![The customize popup: a checklist of blocks with the cursor on Weather, key hints at the top, and a live preview of the resulting tab bar at the bottom](docs/customize-popup.png)
+![The customize popup: the three plugin widgets as a checklist with key hints at the top and a live preview of the resulting tab bar at the bottom](docs/customize-popup.png)
 
-In the popup: `↑/↓` or `k/j` to move, `Space` to toggle a block on/off, `K`/`J`
-(shift+k / shift+j) to reorder, `R` (shift+r) to turn everything off, `Enter` to
+In the popup: `↑/↓` or `k/j` to move, `Space` to toggle a widget on/off, `K`/`J`
+(shift+k / shift+j) to reorder, `R` (shift+r) to turn all three off, `Enter` to
 apply (rewrites `config.toml` and reloads herdr), `Esc`/`q` to cancel without
-changing anything. A live preview line at the bottom runs each enabled block's
+changing anything. A live preview line at the bottom runs each enabled widget's
 actual command so you can see the result before committing.
 
-To clear the tab bar without opening the popup:
+To turn off all three plugin widgets without opening the popup:
 
 ```
 herdr plugin action invoke speardragon.herdr-status-ui-bar.reset
 ```
 
-This only flips every block to disabled in `layout.toml` — reopen the popup to turn any of them back on.
+This flips all three to disabled in `layout.toml` (your non-plugin entries stay) —
+reopen the popup to turn any of them back on.
 
-On first install, any widgets already in your `tab_bar_right` are carried over: entries that
-exactly match one of the built-in blocks (weather commands may differ only by city) are promoted
-to that block; everything else — `zoom`, a custom script, a hand-written command — is kept as-is
-in a `custom` block so nothing you had is lost, just reordered/toggled through the same popup.
-Options beyond `city` and `interval_seconds`/`timeout_seconds` per block aren't exposed in the
-popup yet — edit `layout.toml` by hand for those.
+On first install, the plugin detects which of the three widgets you already have
+and starts them enabled (`agent-status` is on by default); the rest are off but
+still listed in the popup. Options beyond `city` and per-widget
+`interval_seconds`/`timeout_seconds` aren't in the popup yet — edit `layout.toml`
+by hand for those.
 
 ## Data sources
 
@@ -119,10 +126,10 @@ The Grok token is never passed as a curl argument — it's sent via stdin config
 
 ## Uninstall
 
-Run the uninstall action (removes the `agent-status` widget and restores your original statusline).
-Any other blocks you arranged with the `customize` popup — `weather`, `herdr-tab-id`, or carried-over
-`custom` ones — are left in place and in the order you set, since those aren't this plugin's to remove.
-If `herdr-tab-id` is still enabled, `tab_id.py` and `layout.toml` are kept so it keeps working; otherwise
+Run the uninstall action (turns off the `agent-status` widget and restores your original statusline).
+The `weather` / `herdr-tab-id` widgets you enabled in the popup, and any non-plugin entries in
+`tab_bar_right`, are left in place and in order. If `weather` or `herdr-tab-id` is still enabled,
+`layout.toml` is kept (and `tab_id.py` too, when `herdr-tab-id` is on) so they keep working; otherwise
 `~/.config/herdr/agent-usage/` is removed entirely:
 
 ```
